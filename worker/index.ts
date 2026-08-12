@@ -4,7 +4,6 @@ import handler from "vinext/server/app-router-entry";
 
 interface Env {
   ASSETS: Fetcher;
-  DB: D1Database;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -12,6 +11,21 @@ interface Env {
       };
     };
   };
+}
+
+const SECURITY_HEADERS = {
+  "Content-Security-Policy": "base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'",
+  "Permissions-Policy": "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Strict-Transport-Security": "max-age=31536000",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+} as const;
+
+function secure(response: Response) {
+  const headers = new Headers(response.headers);
+  Object.entries(SECURITY_HEADERS).forEach(([key, value]) => headers.set(key, value));
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
 interface ExecutionContext {
@@ -31,16 +45,17 @@ const worker = {
 
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
-      return handleImageOptimization(request, {
+      const response = await handleImageOptimization(request, {
         fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
         transformImage: async (body, { width, format, quality }) => {
           const result = await env.IMAGES.input(body).transform(width > 0 ? { width } : {}).output({ format, quality });
           return result.response();
         },
       }, allowedWidths);
+      return secure(response);
     }
 
-    return handler.fetch(request, env, ctx);
+    return secure(await handler.fetch(request, env, ctx));
   },
 };
 

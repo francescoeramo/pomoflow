@@ -1,12 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Mode = "focus" | "short" | "long";
 type Durations = Record<Mode, number>;
 
 const DEFAULT_DURATIONS: Durations = { focus: 25, short: 5, long: 15 };
+const DEFAULT_SESSION_TARGET = 4;
+const MIN_SESSION_TARGET = 1;
+const MAX_SESSION_TARGET = 12;
 const DEFAULT_SPOTIFY = "https://open.spotify.com/playlist/37i9dQZF1DX8Uebhn9wzrS";
+const STORAGE_KEYS = {
+  durations: "pomoflow-durations",
+  sessionTarget: "pomoflow-session-target",
+  spotify: "pomoflow-spotify",
+} as const;
 
 const MODES: { id: Mode; label: string }[] = [
   { id: "focus", label: "Focus" },
@@ -18,6 +26,18 @@ function clampMinutes(value: number) {
   return Math.min(180, Math.max(1, Math.round(value || 1)));
 }
 
+function clampSessionTarget(value: number) {
+  return Math.min(MAX_SESSION_TARGET, Math.max(MIN_SESSION_TARGET, Math.round(value || DEFAULT_SESSION_TARGET)));
+}
+
+function savePreference(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Storage can be disabled or full. The in-memory preference still works.
+  }
+}
+
 function spotifyEmbedUrl(value: string) {
   const trimmed = value.trim();
   const uriMatch = trimmed.match(/^spotify:(track|album|playlist|artist|episode|show):([A-Za-z0-9]+)$/);
@@ -25,7 +45,7 @@ function spotifyEmbedUrl(value: string) {
 
   try {
     const url = new URL(trimmed);
-    if (url.hostname !== "open.spotify.com") return null;
+    if (url.protocol !== "https:" || url.hostname !== "open.spotify.com") return null;
     const parts = url.pathname.split("/").filter(Boolean);
     const typeIndex = parts.findIndex((part) => ["track", "album", "playlist", "artist", "episode", "show"].includes(part));
     const type = parts[typeIndex];
@@ -72,6 +92,7 @@ export default function Home() {
   const [remaining, setRemaining] = useState(DEFAULT_DURATIONS.focus * 60);
   const [running, setRunning] = useState(false);
   const [completed, setCompleted] = useState(0);
+  const [sessionTarget, setSessionTarget] = useState(DEFAULT_SESSION_TARGET);
   const [spotifyInput, setSpotifyInput] = useState(DEFAULT_SPOTIFY);
   const [spotifyUrl, setSpotifyUrl] = useState(() => spotifyEmbedUrl(DEFAULT_SPOTIFY) ?? "");
   const [spotifyError, setSpotifyError] = useState("");
@@ -80,29 +101,38 @@ export default function Home() {
   const finishedRef = useRef(false);
 
   useEffect(() => {
-    try {
-      const savedDurations = window.localStorage.getItem("pomoflow-durations");
-      const savedSpotify = window.localStorage.getItem("pomoflow-spotify");
-      if (savedDurations) {
-        const parsed = JSON.parse(savedDurations) as Partial<Durations>;
-        const next = {
-          focus: clampMinutes(parsed.focus ?? DEFAULT_DURATIONS.focus),
-          short: clampMinutes(parsed.short ?? DEFAULT_DURATIONS.short),
-          long: clampMinutes(parsed.long ?? DEFAULT_DURATIONS.long),
-        };
-        setDurations(next);
-        setRemaining(next.focus * 60);
-      }
-      if (savedSpotify) {
-        const embed = spotifyEmbedUrl(savedSpotify);
-        if (embed) {
-          setSpotifyInput(savedSpotify);
-          setSpotifyUrl(embed);
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      try {
+        const savedDurations = window.localStorage.getItem(STORAGE_KEYS.durations);
+        const savedSessionTarget = window.localStorage.getItem(STORAGE_KEYS.sessionTarget);
+        const savedSpotify = window.localStorage.getItem(STORAGE_KEYS.spotify);
+        if (savedDurations) {
+          const parsed = JSON.parse(savedDurations) as Partial<Durations>;
+          const next = {
+            focus: clampMinutes(parsed.focus ?? DEFAULT_DURATIONS.focus),
+            short: clampMinutes(parsed.short ?? DEFAULT_DURATIONS.short),
+            long: clampMinutes(parsed.long ?? DEFAULT_DURATIONS.long),
+          };
+          setDurations(next);
+          setRemaining(next.focus * 60);
         }
+        if (savedSessionTarget) {
+          setSessionTarget(clampSessionTarget(Number(savedSessionTarget)));
+        }
+        if (savedSpotify) {
+          const embed = spotifyEmbedUrl(savedSpotify);
+          if (embed) {
+            setSpotifyInput(savedSpotify);
+            setSpotifyUrl(embed);
+          }
+        }
+      } catch {
+        // Keep sensible defaults if browser storage is unavailable.
       }
-    } catch {
-      // Keep sensible defaults if browser storage is unavailable.
-    }
+    });
+    return () => { active = false; };
   }, []);
 
   const switchMode = useCallback((nextMode: Mode) => {
@@ -123,7 +153,7 @@ export default function Home() {
     if (mode === "focus") {
       setCompleted((value) => {
         const next = value + 1;
-        const nextMode: Mode = next % 4 === 0 ? "long" : "short";
+        const nextMode: Mode = next % sessionTarget === 0 ? "long" : "short";
         setMode(nextMode);
         setRemaining(durations[nextMode] * 60);
         return next;
@@ -132,7 +162,7 @@ export default function Home() {
       setMode("focus");
       setRemaining(durations.focus * 60);
     }
-  }, [durations, mode]);
+  }, [durations, mode, sessionTarget]);
 
   useEffect(() => {
     if (!running) return;
@@ -152,8 +182,8 @@ export default function Home() {
   }, [mode, remaining]);
 
   const totalSeconds = durations[mode] * 60;
-  const progress = useMemo(() => Math.max(0, Math.min(100, ((totalSeconds - remaining) / totalSeconds) * 100)), [remaining, totalSeconds]);
-  const cyclePosition = completed % 4;
+  const progress = Math.max(0, Math.min(100, ((totalSeconds - remaining) / totalSeconds) * 100));
+  const cyclePosition = completed % sessionTarget;
 
   function toggleTimer() {
     finishedRef.current = false;
@@ -176,8 +206,15 @@ export default function Home() {
   function updateDuration(key: Mode, value: number) {
     const next = { ...durations, [key]: clampMinutes(value) };
     setDurations(next);
-    window.localStorage.setItem("pomoflow-durations", JSON.stringify(next));
+    savePreference(STORAGE_KEYS.durations, JSON.stringify(next));
     if (key === mode && !running) setRemaining(next[key] * 60);
+  }
+
+  function updateSessionTarget(value: number) {
+    const next = clampSessionTarget(value);
+    setSessionTarget(next);
+    setCompleted((current) => current % next);
+    savePreference(STORAGE_KEYS.sessionTarget, String(next));
   }
 
   function loadSpotify() {
@@ -188,7 +225,7 @@ export default function Home() {
     }
     setSpotifyError("");
     setSpotifyUrl(embed);
-    window.localStorage.setItem("pomoflow-spotify", spotifyInput.trim());
+    savePreference(STORAGE_KEYS.spotify, spotifyInput.trim());
   }
 
   return (
@@ -209,7 +246,7 @@ export default function Home() {
         <p>One timer. One soundtrack. Deep work without the clutter.</p>
       </section>
 
-      {settingsOpen && (
+      {settingsOpen ? (
         <section className="settings-panel" id="timer-settings" aria-label="Timer duration settings">
           <div>
             <p className="panel-kicker">Session lengths</p>
@@ -222,9 +259,14 @@ export default function Home() {
                 <span className="number-field"><input type="number" min="1" max="180" inputMode="numeric" value={durations[item.id]} onChange={(event) => updateDuration(item.id, Number(event.target.value))} /><em>min</em></span>
               </label>
             ))}
+            <label>
+              <span>Sessions per cycle</span>
+              <span className="number-field"><input type="number" min={MIN_SESSION_TARGET} max={MAX_SESSION_TARGET} inputMode="numeric" value={sessionTarget} onChange={(event) => updateSessionTarget(Number(event.target.value))} aria-describedby="session-target-help" /><em>sessions</em></span>
+            </label>
           </div>
+          <p className="settings-help" id="session-target-help">A long break starts after this many focus sessions.</p>
         </section>
-      )}
+      ) : null}
 
       <div className="workspace-grid">
         <section className="timer-card" id="timer" aria-label="Pomodoro timer">
@@ -243,17 +285,17 @@ export default function Home() {
           </div>
 
           <div className="timer-actions">
-            <button className="primary-action" type="button" onClick={toggleTimer}>{running ? "Pause" : "Start focus"}<span aria-hidden="true">{running ? "Ⅱ" : "▶"}</span></button>
+            <button className="primary-action" type="button" onClick={toggleTimer}>{running ? "Pause" : `Start ${mode === "focus" ? "focus" : "break"}`}<span aria-hidden="true">{running ? "Ⅱ" : "▶"}</span></button>
             <button className="secondary-action" type="button" onClick={resetTimer}>Reset</button>
           </div>
 
           <div className="cycle-row">
             <div>
               <span className="cycle-label">Today’s cycle</span>
-              <strong>{cyclePosition} of 4 sessions</strong>
+              <strong>{cyclePosition} of {sessionTarget} sessions</strong>
             </div>
-            <div className="cycle-dots" aria-label={`${cyclePosition} of 4 focus sessions completed`}>
-              {[0, 1, 2, 3].map((dot) => <span key={dot} className={dot < cyclePosition ? "complete" : dot === cyclePosition ? "current" : ""} />)}
+            <div className="cycle-dots" aria-label={`${cyclePosition} of ${sessionTarget} focus sessions completed`}>
+              {Array.from({ length: sessionTarget }, (_, dot) => <span key={dot} className={dot < cyclePosition ? "complete" : dot === cyclePosition ? "current" : ""} />)}
             </div>
           </div>
         </section>
@@ -266,7 +308,7 @@ export default function Home() {
 
           <div className="spotify-player">
             {spotifyUrl ? (
-              <iframe src={spotifyUrl} title="Spotify music player" loading="lazy" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" />
+              <iframe src={spotifyUrl} title="Spotify music player" loading="lazy" referrerPolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" />
             ) : (
               <div className="player-placeholder"><span>♪</span><p>Add a Spotify link to start listening.</p></div>
             )}
@@ -275,7 +317,7 @@ export default function Home() {
           <div className="spotify-connect">
             <label htmlFor="spotify-link">Spotify link</label>
             <div className="spotify-input-row">
-              <input id="spotify-link" type="url" value={spotifyInput} onChange={(event) => setSpotifyInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") loadSpotify(); }} placeholder="https://open.spotify.com/playlist/…" autoComplete="off" />
+              <input id="spotify-link" type="url" value={spotifyInput} onChange={(event) => setSpotifyInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") loadSpotify(); }} placeholder="https://open.spotify.com/playlist/…" autoComplete="off" maxLength={500} />
               <button type="button" onClick={loadSpotify}>Load player</button>
             </div>
             {spotifyError ? <p className="spotify-error" role="alert">{spotifyError}</p> : <p className="spotify-help">Paste any public Spotify link. Playback stays in Spotify’s official player.</p>}

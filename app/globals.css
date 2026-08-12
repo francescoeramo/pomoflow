@@ -55,13 +55,14 @@ button:focus-visible, input:focus-visible, a:focus-visible {
 .hero-copy h1 { margin: 8px 0 6px; font-size: clamp(42px, 5vw, 78px); line-height: .98; letter-spacing: -.065em; font-weight: 820; }
 .hero-copy > p:last-child { margin: 0; color: var(--muted); font-size: 16px; }
 
-.settings-panel { display: flex; align-items: center; justify-content: space-between; gap: 28px; margin: 0 0 28px; padding: 19px 22px; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); }
+.settings-panel { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px 28px; margin: 0 0 28px; padding: 19px 22px; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); }
 .settings-note { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
 .duration-fields { display: flex; gap: 14px; flex-wrap: wrap; }
 .duration-fields label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
 .number-field { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 11px; background: #0e100e; overflow: hidden; }
 .number-field input { width: 70px; border: 0; padding: 8px 4px 8px 11px; background: transparent; color: var(--text); outline: 0; }
 .number-field em { padding-right: 10px; color: var(--muted); font-style: normal; font-size: 11px; }
+.settings-help { grid-column: 2; margin: 0; color: var(--muted); font-size: 11px; }
 
 .workspace-grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(330px, .88fr); gap: 30px; align-items: stretch; }
 .timer-card, .spotify-card { border: 1px solid var(--border); border-radius: 34px; background: rgba(18,21,18,.94); box-shadow: 0 24px 80px rgba(0,0,0,.22); }
@@ -86,7 +87,7 @@ button:focus-visible, input:focus-visible, a:focus-visible {
 .cycle-row { display: flex; align-items: end; justify-content: space-between; gap: 20px; padding-top: 25px; margin-top: 24px; border-top: 1px solid var(--border); }
 .cycle-row strong { display: block; margin-top: 4px; font-size: 14px; font-weight: 600; }
 .cycle-label { color: var(--muted); }
-.cycle-dots { display: flex; gap: 8px; }
+.cycle-dots { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; max-width: 55%; }
 .cycle-dots span { display: block; width: 26px; height: 7px; border-radius: 999px; background: #323731; }
 .cycle-dots .complete { background: var(--lime); }
 .cycle-dots .current { box-shadow: inset 0 0 0 1px var(--lime); background: transparent; }
@@ -128,8 +129,9 @@ footer { display: flex; justify-content: space-between; gap: 20px; padding: 22px
   .settings-button { padding: 9px 11px; font-size: 12px; }
   .hero-copy { padding: 42px 2px 23px; }
   .hero-copy > p:last-child { max-width: 29ch; }
-  .settings-panel { align-items: stretch; flex-direction: column; }
-  .duration-fields { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .settings-panel { grid-template-columns: 1fr; align-items: stretch; }
+  .settings-help { grid-column: 1; }
+  .duration-fields { display: grid; grid-template-columns: repeat(2, 1fr); }
   .number-field input { width: 100%; min-width: 0; }
   .timer-card, .spotify-card { border-radius: 24px; }
   .timer-card { padding: 22px 14px; min-height: 480px; }

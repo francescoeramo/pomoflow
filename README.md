@@ -1,98 +1,78 @@
-# vinext-starter
+# Pomoflow
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Pomoflow è un timer Pomodoro responsive con durate configurabili, numero di sessioni per ciclo personalizzabile e player Spotify incorporato. Le preferenze restano nel browser dell'utente: non servono account, database o variabili d'ambiente.
 
-## Prerequisites
+## Funzioni principali
 
-- Node.js `>=22.13.0`
+- modalità focus, pausa breve e pausa lunga;
+- durate da 1 a 180 minuti;
+- ciclo configurabile da 1 a 12 sessioni focus;
+- timer accurato anche quando la scheda del browser viene rallentata;
+- link pubblici Spotify per playlist, album, brani, artisti, podcast ed episodi;
+- preferenze salvate localmente nel browser;
+- interfaccia responsive e utilizzabile da tastiera.
 
-## Quick Start
+## Requisiti
+
+- Node.js 22.13 o successivo;
+- npm 10 o successivo.
+
+Non sono richiesti database, account esterni, file `.env` o credenziali Spotify.
+
+## Avvio completo in locale
+
+Clona la repository, entra nella cartella e installa esattamente le dipendenze del lockfile:
 
 ```bash
-npm install
+git clone https://github.com/francescoeramo/pomoflow.git
+cd pomoflow
+npm ci
+```
+
+Avvia l'ambiente di sviluppo:
+
+```bash
 npm run dev
+```
+
+Apri l'indirizzo mostrato nel terminale, normalmente `http://localhost:3000`.
+
+Per provare localmente la build di produzione:
+
+```bash
 npm run build
+npm start
 ```
 
-This starter does not use `wrangler.jsonc`.
+## Controlli di qualità
 
-## Included Shape
-
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+npm run lint
+npm test
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+`npm test` crea una build completa e verifica il rendering server, i contenuti principali e le intestazioni di sicurezza.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+## Struttura essenziale
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+- `app/page.tsx`: timer, ciclo delle sessioni, preferenze locali e player Spotify;
+- `app/globals.css`: layout responsive e stile;
+- `app/layout.tsx`: metadati e social preview;
+- `worker/index.ts`: ingresso Cloudflare/Sites e intestazioni di sicurezza;
+- `next.config.ts`: configurazione equivalente per Next.js/Vercel;
+- `tests/rendered-html.test.mjs`: test del risultato compilato.
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+## Privacy e sicurezza
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+Pomoflow non invia a un backend le durate o il link Spotify scelto. I dati vengono conservati solo in `localStorage`. Il player è l'embed ufficiale di `open.spotify.com`; URL con protocolli o host diversi vengono rifiutati. Le risposte applicano policy contro framing, MIME sniffing e accesso non necessario a fotocamera, microfono, posizione, pagamenti e USB.
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+## Deploy su Vercel
 
-## Useful Commands
+Dopo aver installato e autenticato la CLI Vercel:
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+```bash
+vercel link
+vercel --prod
+```
 
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+Il progetto non richiede variabili d'ambiente anche in produzione.
