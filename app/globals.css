@@ -109,7 +109,7 @@ button:focus-visible, input:focus-visible, a:focus-visible {
 .spotify-login-state > span { color: var(--spotify); font-size: 52px; line-height: 1; }
 .spotify-login-state h3 { margin: 14px 0 6px; color: var(--text); font-size: 22px; letter-spacing: -.035em; }
 .spotify-login-state p { max-width: 33ch; margin: 0 0 20px; font-size: 13px; line-height: 1.5; }
-.spotify-login { min-height: 46px; border: 0; border-radius: 999px; padding: 0 22px; background: var(--spotify); color: #071a0d; font-weight: 760; transition: transform .15s ease, filter .15s ease; }
+.spotify-login { min-height: 46px; display: inline-grid; place-items: center; border: 0; border-radius: 999px; padding: 0 22px; background: var(--spotify); color: #071a0d; font-weight: 760; text-decoration: none; transition: transform .15s ease, filter .15s ease; }
 .spotify-login:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
 .spotify-login:disabled { cursor: not-allowed; opacity: .55; }
 .now-playing { position: relative; display: grid; grid-template-columns: 112px minmax(0, 1fr); grid-template-rows: auto auto 1fr; gap: 20px; align-content: center; padding: 28px; }

@@ -10,7 +10,6 @@ type SpotifyResource = {
 
 type SpotifyToken = {
   accessToken: string;
-  refreshToken: string;
   expiresAt: number;
 };
 
@@ -53,17 +52,6 @@ declare global {
 
 const DEFAULT_SPOTIFY = "https://open.spotify.com/playlist/37i9dQZF1DX8Uebhn9wzrS";
 const LINK_KEY = "pomoflow-spotify";
-const TOKEN_KEY = "pomoflow-spotify-token";
-const VERIFIER_KEY = "pomoflow-spotify-code-verifier";
-const STATE_KEY = "pomoflow-spotify-oauth-state";
-const REDIRECT_KEY = "pomoflow-spotify-redirect-uri";
-const SCOPES = [
-  "streaming",
-  "user-read-email",
-  "user-read-private",
-  "user-read-playback-state",
-  "user-modify-playback-state",
-];
 
 function saveLocal(key: string, value: string) {
   try {
@@ -78,14 +66,6 @@ function readLocal(key: string) {
     return window.localStorage.getItem(key);
   } catch {
     return null;
-  }
-}
-
-function removeLocal(key: string) {
-  try {
-    window.localStorage.removeItem(key);
-  } catch {
-    // Nothing else is required when storage is unavailable.
   }
 }
 
@@ -111,29 +91,12 @@ function parseSpotifyResource(value: string): SpotifyResource | null {
   }
 }
 
-function randomString(length: number) {
-  const bytes = crypto.getRandomValues(new Uint8Array(length));
-  return Array.from(bytes, (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"[byte % 66]).join("");
-}
-
-function base64Url(bytes: ArrayBuffer) {
-  return btoa(String.fromCharCode(...new Uint8Array(bytes)))
-    .replace(/=/g, "")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_");
-}
-
-async function sha256(value: string) {
-  return crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-}
-
 function formatPlaybackTime(milliseconds: number) {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 export default function SpotifyPlayer() {
-  const [clientId, setClientId] = useState("");
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [token, setToken] = useState<SpotifyToken | null>(null);
   const [spotifyInput, setSpotifyInput] = useState(DEFAULT_SPOTIFY);
@@ -144,53 +107,48 @@ export default function SpotifyPlayer() {
   const [error, setError] = useState("");
   const playerRef = useRef<SpotifyPlayerInstance | null>(null);
   const tokenRef = useRef<SpotifyToken | null>(null);
-  const clientIdRef = useRef("");
+  const tokenRequestRef = useRef<Promise<string> | null>(null);
 
   const persistToken = useCallback((next: SpotifyToken | null) => {
     tokenRef.current = next;
     setToken(next);
-    if (next) saveLocal(TOKEN_KEY, JSON.stringify(next));
-    else removeLocal(TOKEN_KEY);
   }, []);
+
+  const requestAccessToken = useCallback(async () => {
+    const response = await fetch("/api/spotify/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Pomoflow-Request": "1" },
+      body: "{}",
+      cache: "no-store",
+    });
+    const body = await response.json().catch(() => null) as { accessToken?: string; expiresAt?: number; error?: string } | null;
+    if (!response.ok || !body?.accessToken || !body.expiresAt) {
+      persistToken(null);
+      throw new Error(body?.error || "Spotify is not connected.");
+    }
+    persistToken({ accessToken: body.accessToken, expiresAt: body.expiresAt });
+    return body.accessToken;
+  }, [persistToken]);
 
   const refreshAccessToken = useCallback(async () => {
     const current = tokenRef.current;
-    if (!current) throw new Error("Spotify is not connected.");
-    if (current.expiresAt > Date.now() + 60_000) return current.accessToken;
-
-    const response = await fetch("https://accounts.spotify.com/api/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientIdRef.current,
-        grant_type: "refresh_token",
-        refresh_token: current.refreshToken,
-      }),
-    });
-    const body = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number; error_description?: string };
-    if (!response.ok || !body.access_token) throw new Error(body.error_description || "Spotify session expired.");
-    const next = {
-      accessToken: body.access_token,
-      refreshToken: body.refresh_token || current.refreshToken,
-      expiresAt: Date.now() + (body.expires_in ?? 3600) * 1000,
-    };
-    persistToken(next);
-    return next.accessToken;
-  }, [persistToken]);
+    if (current?.expiresAt && current.expiresAt > Date.now() + 60_000) return current.accessToken;
+    if (tokenRequestRef.current) return tokenRequestRef.current;
+    const pending = requestAccessToken().finally(() => { tokenRequestRef.current = null; });
+    tokenRequestRef.current = pending;
+    return pending;
+  }, [requestAccessToken]);
 
   useEffect(() => {
     let active = true;
     async function configure() {
       try {
         const response = await fetch("/api/spotify/config", { cache: "no-store" });
-        const data = await response.json() as { configured: boolean; clientId: string };
+        const data = await response.json() as { configured: boolean };
         if (!active) return;
         setConfigured(data.configured);
-        setClientId(data.clientId);
-        clientIdRef.current = data.clientId;
 
         const savedLink = readLocal(LINK_KEY);
-        const savedToken = readLocal(TOKEN_KEY);
         if (savedLink) {
           const parsed = parseSpotifyResource(savedLink);
           if (parsed) {
@@ -198,77 +156,40 @@ export default function SpotifyPlayer() {
             setResource(parsed);
           }
         }
-        if (savedToken) {
-          const parsed = JSON.parse(savedToken) as SpotifyToken;
-          if (parsed.accessToken && parsed.refreshToken && parsed.expiresAt) persistToken(parsed);
+
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get("code");
+        const returnedState = params.get("state");
+        const authError = params.get("error");
+        if (code || authError) {
+          window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.hash}`);
+          const callbackResponse = await fetch("/api/spotify/callback", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Pomoflow-Request": "1" },
+            body: JSON.stringify({ code, error: authError, state: returnedState }),
+            cache: "no-store",
+          });
+          const callbackBody = await callbackResponse.json().catch(() => null) as { error?: string } | null;
+          if (!callbackResponse.ok) throw new Error(callbackBody?.error || "Spotify login failed.");
+          await requestAccessToken();
+          if (active) setStatus("Spotify connected. Preparing the player…");
+        } else {
+          await requestAccessToken().catch(() => null);
         }
-      } catch {
+      } catch (caught) {
         if (active) {
-          setConfigured(false);
-          setError("Spotify configuration is temporarily unavailable.");
+          setError(caught instanceof Error ? caught.message : "Spotify configuration is temporarily unavailable.");
         }
       }
     }
     void configure();
     return () => { active = false; };
-  }, [persistToken]);
-
-  useEffect(() => {
-    if (!clientId) return;
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    const returnedState = params.get("state");
-    const authError = params.get("error");
-    if (!code && !authError) return;
-
-    const cleanUrl = `${window.location.pathname}${window.location.hash}`;
-    window.history.replaceState({}, document.title, cleanUrl);
-    if (authError) {
-      queueMicrotask(() => setError(authError === "access_denied" ? "Spotify access was not granted." : "Spotify login failed."));
-      return;
-    }
-
-    if (!code) return;
-    const verifier = readLocal(VERIFIER_KEY);
-    const expectedState = readLocal(STATE_KEY);
-    const redirectUri = readLocal(REDIRECT_KEY);
-    removeLocal(VERIFIER_KEY);
-    removeLocal(STATE_KEY);
-    removeLocal(REDIRECT_KEY);
-    if (!verifier || !redirectUri || !returnedState || returnedState !== expectedState) {
-      queueMicrotask(() => setError("Spotify login could not be verified. Please try again."));
-      return;
-    }
-    const authCode = code;
-
-    void (async () => {
-      try {
-        const response = await fetch("https://accounts.spotify.com/api/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            client_id: clientId,
-            grant_type: "authorization_code",
-            code: authCode,
-            redirect_uri: redirectUri,
-            code_verifier: verifier,
-          }),
-        });
-        const body = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number; error_description?: string };
-        if (!response.ok || !body.access_token || !body.refresh_token) throw new Error(body.error_description || "Spotify login failed.");
-        persistToken({ accessToken: body.access_token, refreshToken: body.refresh_token, expiresAt: Date.now() + (body.expires_in ?? 3600) * 1000 });
-        setError("");
-        setStatus("Spotify connected. Preparing the player…");
-      } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Spotify login failed.");
-      }
-    })();
-  }, [clientId, persistToken]);
+  }, [requestAccessToken]);
 
   const connected = Boolean(token);
 
   useEffect(() => {
-    if (!connected || !clientId || playerRef.current) return;
+    if (!connected || playerRef.current) return;
 
     const initialize = () => {
       if (!window.Spotify || playerRef.current) return;
@@ -277,6 +198,7 @@ export default function SpotifyPlayer() {
         getOAuthToken: (callback) => {
           void refreshAccessToken().then(callback).catch(() => {
             persistToken(null);
+            void fetch("/api/spotify/logout", { method: "POST", headers: { "X-Pomoflow-Request": "1" } });
             setError("Spotify session expired. Please connect again.");
           });
         },
@@ -322,38 +244,15 @@ export default function SpotifyPlayer() {
       playerRef.current?.disconnect();
       playerRef.current = null;
     };
-  }, [clientId, connected, persistToken, refreshAccessToken]);
+  }, [connected, persistToken, refreshAccessToken]);
 
-  async function login() {
-    if (!clientId) return;
-    const verifier = randomString(64);
-    const state = randomString(32);
-    const redirectUri = `${window.location.origin}/`;
-    const challenge = base64Url(await sha256(verifier));
-    saveLocal(VERIFIER_KEY, verifier);
-    saveLocal(STATE_KEY, state);
-    saveLocal(REDIRECT_KEY, redirectUri);
-
-    const authUrl = new URL("https://accounts.spotify.com/authorize");
-    authUrl.search = new URLSearchParams({
-      client_id: clientId,
-      response_type: "code",
-      redirect_uri: redirectUri,
-      code_challenge_method: "S256",
-      code_challenge: challenge,
-      state,
-      scope: SCOPES.join(" "),
-      show_dialog: "true",
-    }).toString();
-    window.location.assign(authUrl.toString());
-  }
-
-  function logout() {
+  async function logout() {
     playerRef.current?.disconnect();
     playerRef.current = null;
     setDeviceId("");
     setPlayerState(null);
     persistToken(null);
+    await fetch("/api/spotify/logout", { method: "POST", headers: { "X-Pomoflow-Request": "1" }, cache: "no-store" }).catch(() => null);
     setStatus("Connect Spotify to play complete tracks.");
   }
 
@@ -398,7 +297,7 @@ export default function SpotifyPlayer() {
       <div className="spotify-heading">
         <div className="spotify-icon" aria-hidden="true"><i /><i /><i /></div>
         <div className="spotify-heading-copy"><p className="panel-kicker">Your soundtrack</p><h2 id="spotify-title">Spotify Premium</h2></div>
-        {token ? <button className="spotify-logout" type="button" onClick={logout}>Disconnect</button> : null}
+        {token ? <button className="spotify-logout" type="button" onClick={() => void logout()}>Disconnect</button> : null}
       </div>
 
       <div className="spotify-player spotify-sdk-player">
@@ -427,9 +326,9 @@ export default function SpotifyPlayer() {
             <h3>{token ? (deviceId ? "Your player is ready" : "Connecting to Spotify…") : "Listen to every track"}</h3>
             <p>{status}</p>
             {!token ? (
-              <button className="spotify-login" type="button" onClick={() => void login()} disabled={!configured}>
-                {configured === null ? "Checking Spotify…" : configured ? "Connect Spotify" : "Spotify setup required"}
-              </button>
+              configured ? <a className="spotify-login" href="/api/spotify/login">Connect Spotify</a> : (
+                <button className="spotify-login" type="button" disabled>{configured === null ? "Checking Spotify…" : "Spotify setup required"}</button>
+              )
             ) : deviceId ? (
               <button className="spotify-login" type="button" onClick={() => void playSelection()}>Play full playlist</button>
             ) : null}

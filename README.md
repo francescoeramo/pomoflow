@@ -1,6 +1,6 @@
 # Pomoflow
 
-Pomoflow è un timer Pomodoro responsive con durate configurabili, numero di sessioni per ciclo personalizzabile e riproduzione Spotify completa tramite il Web Playback SDK ufficiale. Le preferenze e la sessione OAuth restano nel browser dell'utente.
+Pomoflow è un timer Pomodoro responsive con durate configurabili, numero di sessioni per ciclo personalizzabile e riproduzione Spotify completa tramite il Web Playback SDK ufficiale. Le preferenze non sensibili restano nel browser; i token OAuth sono protetti da cookie di sessione `HttpOnly`.
 
 ## Funzioni principali
 
@@ -8,7 +8,7 @@ Pomoflow è un timer Pomodoro responsive con durate configurabili, numero di ses
 - durate da 1 a 180 minuti;
 - ciclo configurabile da 1 a 12 sessioni focus;
 - timer accurato anche quando la scheda del browser viene rallentata;
-- login Spotify con Authorization Code + PKCE, senza client secret nel browser;
+- login Spotify con Authorization Code + PKCE, senza client secret o refresh token nel browser;
 - riproduzione completa di playlist, album, artisti e brani tramite Spotify Connect;
 - controlli play/pausa, precedente e successivo con copertina e brano corrente;
 - preferenze salvate localmente nel browser;
@@ -30,6 +30,7 @@ Copia `.env.example` in `.env.local` e inserisci soltanto il Client ID pubblico:
 
 ```bash
 SPOTIFY_CLIENT_ID=il_client_id_della_tua_app
+SPOTIFY_ALLOWED_ORIGINS=http://127.0.0.1:3000,https://pomoflow-focus-timer.francescoeramo4.chatgpt.site,https://pomoflow-eta.vercel.app
 ```
 
 Non serve e non deve essere salvato alcun Client Secret.
@@ -71,8 +72,12 @@ npm test
 ## Struttura essenziale
 
 - `app/page.tsx`: timer, ciclo delle sessioni e preferenze locali;
-- `app/spotify-player.tsx`: OAuth PKCE, Web Playback SDK e controlli Spotify;
-- `app/api/spotify/config/route.ts`: espone al client il solo Client ID pubblico;
+- `app/spotify-player.tsx`: Web Playback SDK, access token solo in memoria e controlli Spotify;
+- `app/api/spotify/login/route.ts`: avvia OAuth PKCE e salva verifier/state in cookie `HttpOnly` temporanei;
+- `app/api/spotify/callback/route.ts`: valida stato e origine, quindi scambia il codice sul server;
+- `app/api/spotify/token/route.ts`: rinnova la sessione senza esporre il refresh token;
+- `app/api/spotify/logout/route.ts`: elimina tutti i cookie Spotify;
+- `app/api/spotify/config/route.ts`: comunica soltanto se Spotify è configurato per l'origine corrente;
 - `app/globals.css`: layout responsive e stile;
 - `app/layout.tsx`: metadati e social preview;
 - `worker/index.ts`: ingresso Cloudflare/Sites e intestazioni di sicurezza;
@@ -81,7 +86,7 @@ npm test
 
 ## Privacy e sicurezza
 
-Pomoflow non invia al proprio backend le durate, il link Spotify o i token dell'utente. Questi dati vengono conservati solo in `localStorage`; le richieste di autorizzazione, token e riproduzione vanno direttamente ai domini ufficiali Spotify. URL con protocolli o host diversi da `open.spotify.com` vengono rifiutati. Le risposte applicano policy contro framing, MIME sniffing e accesso non necessario a fotocamera, microfono, posizione, pagamenti e USB.
+Pomoflow non invia al proprio backend le durate o il link Spotify, che restano in `localStorage`. Il backend gestisce esclusivamente lo scambio OAuth: verifier, stato e refresh token sono cookie di sessione `HttpOnly`, `SameSite=Lax` e `Secure` in produzione; l'access token breve viene consegnato al Web Playback SDK e conservato solo in memoria. Le mutazioni OAuth accettano soltanto richieste della stessa origine e le origini ammesse sono esplicite. URL con protocolli o host diversi da `open.spotify.com` vengono rifiutati. La CSP limita script, connessioni, immagini, media e worker ai domini necessari.
 
 ## Deploy su Vercel
 
@@ -92,4 +97,4 @@ vercel link
 vercel --prod
 ```
 
-Configura `SPOTIFY_CLIENT_ID` negli ambienti Production e Preview di Vercel prima del deploy. Su Sites configura la stessa variabile d'ambiente dal pannello del progetto.
+Configura `SPOTIFY_CLIENT_ID` e `SPOTIFY_ALLOWED_ORIGINS` negli ambienti Production e Preview di Vercel prima del deploy. Su Sites configura le stesse variabili d'ambiente dal pannello del progetto.

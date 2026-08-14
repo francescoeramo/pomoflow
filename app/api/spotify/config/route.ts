@@ -1,12 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { getRequestOrigin, getSpotifyClientId, noStoreJson } from "../_lib";
 
 export const dynamic = "force-dynamic";
 
-export function GET() {
-  const clientId = process.env.SPOTIFY_CLIENT_ID?.trim() ?? "";
-
-  return NextResponse.json(
-    { configured: Boolean(clientId), clientId },
-    { headers: { "Cache-Control": "no-store" } },
-  );
+export function GET(request: NextRequest) {
+  return noStoreJson({ configured: Boolean(getSpotifyClientId() && getRequestOrigin(request)) });
 }

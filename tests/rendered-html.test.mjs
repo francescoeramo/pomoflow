@@ -33,6 +33,9 @@ test("applies the production security headers", async () => {
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   assert.equal(response.headers.get("x-frame-options"), "DENY");
   assert.match(response.headers.get("content-security-policy") ?? "", /frame-ancestors 'none'/);
+  assert.match(response.headers.get("content-security-policy") ?? "", /script-src 'self' 'unsafe-inline' https:\/\/sdk\.scdn\.co/);
+  assert.match(response.headers.get("content-security-policy") ?? "", /connect-src 'self'.*api\.spotify\.com/);
+  assert.equal(response.headers.get("cross-origin-opener-policy"), "same-origin");
   assert.match(response.headers.get("permissions-policy") ?? "", /camera=\(\)/);
 });
 
@@ -47,9 +50,14 @@ test("keeps cycle length configurable and rejects template cruft", async () => {
   assert.match(page, /pomoflow-session-target/);
   assert.match(page, /Sessions per cycle/);
   assert.match(page, /Array\.from\(\{ length: sessionTarget \}/);
-  assert.match(spotifyPlayer, /code_challenge_method: "S256"/);
+  const spotifyApi = await readFile(new URL("../app/api/spotify/_lib.ts", import.meta.url), "utf8");
+  assert.match(spotifyApi, /createCodeChallenge/);
+  assert.match(spotifyApi, /httpOnly: true/);
+  assert.match(spotifyApi, /sameSite: "lax"/);
+  assert.doesNotMatch(spotifyPlayer, /pomoflow-spotify-token|refreshToken|code_verifier/);
   assert.match(spotifyPlayer, /https:\/\/sdk\.scdn\.co\/spotify-player\.js/);
-  assert.match(spotifyPlayer, /user-modify-playback-state/);
+  assert.match(spotifyApi, /user-modify-playback-state/);
+  assert.doesNotMatch(spotifyApi, /user-read-playback-state/);
   assert.doesNotMatch(packageJson, /drizzle|react-loading-skeleton/);
   assert.match(readme, /npm ci/);
   assert.match(readme, /npm run build/);
