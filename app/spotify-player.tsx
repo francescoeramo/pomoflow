@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Script from "next/script";
 
 type SpotifyResource = {
   type: "track" | "album" | "playlist" | "artist";
@@ -52,6 +53,7 @@ declare global {
 
 const DEFAULT_SPOTIFY = "https://open.spotify.com/playlist/37i9dQZF1DX8Uebhn9wzrS";
 const LINK_KEY = "pomoflow-spotify";
+const PLAYER_READY_TIMEOUT_MS = 15_000;
 
 function saveLocal(key: string, value: string) {
   try {
@@ -105,6 +107,7 @@ export default function SpotifyPlayer() {
   const [playerState, setPlayerState] = useState<SpotifyPlaybackState | null>(null);
   const [status, setStatus] = useState("Connect Spotify to play complete tracks.");
   const [error, setError] = useState("");
+  const [sdkRequested, setSdkRequested] = useState(false);
   const playerRef = useRef<SpotifyPlayerInstance | null>(null);
   const tokenRef = useRef<SpotifyToken | null>(null);
   const tokenRequestRef = useRef<Promise<string> | null>(null);
@@ -174,7 +177,8 @@ export default function SpotifyPlayer() {
           await requestAccessToken();
           if (active) setStatus("Spotify connected. Preparing the player…");
         } else {
-          await requestAccessToken().catch(() => null);
+          const accessToken = await requestAccessToken().catch(() => null);
+          if (accessToken && active) setStatus("Spotify connected. Preparing the player…");
         }
       } catch (caught) {
         if (active) {
@@ -190,6 +194,7 @@ export default function SpotifyPlayer() {
 
   useEffect(() => {
     if (!connected || playerRef.current) return;
+    let readyTimeout: number | undefined;
 
     const initialize = () => {
       if (!window.Spotify || playerRef.current) return;
@@ -207,7 +212,9 @@ export default function SpotifyPlayer() {
       });
 
       player.addListener("ready", (({ device_id }: { device_id: string }) => {
+        if (readyTimeout) window.clearTimeout(readyTimeout);
         setDeviceId(device_id);
+        setError("");
         setStatus("Ready. Choose a playlist and press Play.");
       }) as (payload: never) => void);
       player.addListener("not_ready", (() => {
@@ -224,23 +231,36 @@ export default function SpotifyPlayer() {
       }) as (payload: never) => void);
       player.addListener("account_error", (() => setError("Full playback requires a Spotify Premium account.")) as (payload: never) => void);
       player.addListener("playback_error", ((payload: { message: string }) => setError(payload.message)) as (payload: never) => void);
+      player.addListener("autoplay_failed", (() => setError("Your browser blocked autoplay. Press Play again to start listening.")) as (payload: never) => void);
       playerRef.current = player;
-      void player.connect();
+      readyTimeout = window.setTimeout(() => {
+        if (playerRef.current !== player) return;
+        setStatus("Spotify could not finish connecting.");
+        setError("The Spotify player did not become ready. Check privacy extensions and try reconnecting.");
+      }, PLAYER_READY_TIMEOUT_MS);
+      void player.connect().then((success) => {
+        if (!success && playerRef.current === player) {
+          if (readyTimeout) window.clearTimeout(readyTimeout);
+          setStatus("Spotify could not connect.");
+          setError("Spotify refused the player connection. Disconnect and try again.");
+        }
+      }).catch(() => {
+        if (readyTimeout) window.clearTimeout(readyTimeout);
+        if (playerRef.current === player) {
+          setStatus("Spotify could not connect.");
+          setError("The Spotify player connection failed. Disconnect and try again.");
+        }
+      });
     };
 
     if (window.Spotify) initialize();
     else {
       window.onSpotifyWebPlaybackSDKReady = initialize;
-      const existing = document.querySelector<HTMLScriptElement>('script[src="https://sdk.scdn.co/spotify-player.js"]');
-      if (!existing) {
-        const script = document.createElement("script");
-        script.src = "https://sdk.scdn.co/spotify-player.js";
-        script.async = true;
-        document.body.appendChild(script);
-      }
+      queueMicrotask(() => setSdkRequested(true));
     }
 
     return () => {
+      if (readyTimeout) window.clearTimeout(readyTimeout);
       playerRef.current?.disconnect();
       playerRef.current = null;
     };
@@ -294,6 +314,18 @@ export default function SpotifyPlayer() {
 
   return (
     <section className="spotify-card" aria-labelledby="spotify-title">
+      {sdkRequested ? (
+        <Script
+          id="spotify-web-playback-sdk"
+          src="https://sdk.scdn.co/spotify-player.js"
+          strategy="afterInteractive"
+          onLoad={() => window.onSpotifyWebPlaybackSDKReady?.()}
+          onError={() => {
+            setStatus("Spotify could not connect.");
+            setError("The Spotify player could not be loaded. Check your connection or privacy extensions.");
+          }}
+        />
+      ) : null}
       <div className="spotify-heading">
         <div className="spotify-icon" aria-hidden="true"><i /><i /><i /></div>
         <div className="spotify-heading-copy"><p className="panel-kicker">Your soundtrack</p><h2 id="spotify-title">Spotify Premium</h2></div>

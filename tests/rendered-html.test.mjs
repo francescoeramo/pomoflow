@@ -33,6 +33,7 @@ test("applies the production security headers", async () => {
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   assert.equal(response.headers.get("x-frame-options"), "DENY");
   assert.match(response.headers.get("content-security-policy") ?? "", /frame-ancestors 'none'/);
+  assert.match(response.headers.get("content-security-policy") ?? "", /frame-src https:\/\/sdk\.scdn\.co/);
   assert.match(response.headers.get("content-security-policy") ?? "", /script-src 'self' 'unsafe-inline' https:\/\/sdk\.scdn\.co/);
   assert.match(response.headers.get("content-security-policy") ?? "", /connect-src 'self'.*api\.spotify\.com/);
   assert.equal(response.headers.get("cross-origin-opener-policy"), "same-origin");
@@ -56,6 +57,8 @@ test("keeps cycle length configurable and rejects template cruft", async () => {
   assert.match(spotifyApi, /sameSite: "lax"/);
   assert.doesNotMatch(spotifyPlayer, /pomoflow-spotify-token|refreshToken|code_verifier/);
   assert.match(spotifyPlayer, /https:\/\/sdk\.scdn\.co\/spotify-player\.js/);
+  assert.match(spotifyPlayer, /PLAYER_READY_TIMEOUT_MS/);
+  assert.match(spotifyPlayer, /if \(!success/);
   assert.match(spotifyApi, /user-modify-playback-state/);
   assert.doesNotMatch(spotifyApi, /user-read-playback-state/);
   assert.doesNotMatch(packageJson, /drizzle|react-loading-skeleton/);

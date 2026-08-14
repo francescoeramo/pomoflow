@@ -18,6 +18,7 @@ const CONTENT_SECURITY_POLICY = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
+  "frame-src https://sdk.scdn.co",
   "object-src 'none'",
   "script-src 'self' 'unsafe-inline' https://sdk.scdn.co",
   "script-src-attr 'none'",
