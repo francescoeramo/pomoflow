@@ -56,30 +56,9 @@ const LINK_KEY = "pomoflow-spotify";
 const PLAYER_READY_TIMEOUT_MS = 15_000;
 const SPOTIFY_RESOLVER_URL = "https://apresolve.spotify.com/?type=dealer&type=spclient";
 
-async function supportsEncryptedPlayback() {
-  if (typeof navigator.requestMediaKeySystemAccess !== "function") return false;
-  const configuration: MediaKeySystemConfiguration = {
-    initDataTypes: ["cenc"],
-    audioCapabilities: [{
-      contentType: 'audio/mp4; codecs="mp4a.40.2"',
-      robustness: "SW_SECURE_CRYPTO",
-    }],
-  };
-
-  for (const keySystem of ["com.widevine.alpha", "com.apple.fps", "com.apple.fps.1_0"]) {
-    try {
-      await navigator.requestMediaKeySystemAccess(keySystem, [configuration]);
-      return true;
-    } catch {
-      // Try the next browser DRM implementation.
-    }
-  }
-  return false;
-}
-
 async function verifySpotifyPlaybackEnvironment() {
-  if (!(await supportsEncryptedPlayback())) {
-    throw new Error("Protected playback is unavailable. Enable DRM/Widevine in your browser and reload the page.");
+  if (typeof navigator.requestMediaKeySystemAccess !== "function") {
+    throw new Error("This browser does not expose protected playback. Use a Spotify-supported browser and reload the page.");
   }
 
   try {

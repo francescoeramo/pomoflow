@@ -60,7 +60,8 @@ test("keeps cycle length configurable and rejects template cruft", async () => {
   assert.match(spotifyPlayer, /PLAYER_READY_TIMEOUT_MS/);
   assert.match(spotifyPlayer, /if \(!success/);
   assert.match(spotifyPlayer, /requestMediaKeySystemAccess/);
-  assert.match(spotifyPlayer, /SW_SECURE_CRYPTO/);
+  assert.doesNotMatch(spotifyPlayer, /requestMediaKeySystemAccess\([^)]/);
+  assert.doesNotMatch(spotifyPlayer, /SW_SECURE_CRYPTO|com\.widevine|com\.apple\.fps/);
   assert.match(spotifyPlayer, /apresolve\.spotify\.com/);
   assert.match(spotifyPlayer, /verifySpotifyPlaybackEnvironment/);
   assert.match(spotifyApi, /user-modify-playback-state/);
