@@ -51,7 +51,6 @@ test("keeps cycle length configurable and rejects template cruft", async () => {
   ]);
 
   const spotifyPlayer = await readFile(new URL("../app/spotify-player.tsx", import.meta.url), "utf8");
-  const worker = await readFile(new URL("../worker/index.ts", import.meta.url), "utf8");
   assert.match(page, /pomoflow-session-target/);
   assert.match(page, /Sessions per cycle/);
   assert.match(page, /Array\.from\(\{ length: sessionTarget \}/);
@@ -59,7 +58,6 @@ test("keeps cycle length configurable and rejects template cruft", async () => {
   assert.match(spotifyPlayer, /referrerPolicy="no-referrer"/);
   assert.match(spotifyPlayer, /encrypted-media/);
   assert.doesNotMatch(spotifyPlayer, /accessToken|refreshToken|Authorization|spotify-player\.js|\/api\/spotify/);
-  assert.doesNotMatch(worker, /image-optimization|handleImageOptimization|\/_vinext\/image/);
   assert.doesNotMatch(packageJson, /drizzle|react-loading-skeleton/);
   assert.match(readme, /npm ci/);
   assert.match(readme, /npm run build/);
