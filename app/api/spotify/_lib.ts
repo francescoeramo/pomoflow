@@ -8,8 +8,6 @@ export const SPOTIFY_SCOPES = [
 ];
 
 export const SPOTIFY_COOKIES = {
-  access: "pomoflow_spotify_access",
-  accessExpires: "pomoflow_spotify_access_expires",
   refresh: "pomoflow_spotify_refresh",
   verifier: "pomoflow_spotify_verifier",
   state: "pomoflow_spotify_state",
@@ -70,7 +68,8 @@ export function clearTransientOAuthCookies(response: NextResponse) {
 }
 
 export function clearSpotifySessionCookies(response: NextResponse) {
-  [SPOTIFY_COOKIES.access, SPOTIFY_COOKIES.accessExpires, SPOTIFY_COOKIES.refresh].forEach((name) => response.cookies.set(name, "", cookieOptions(0)));
+  ["pomoflow_spotify_access", "pomoflow_spotify_access_expires", SPOTIFY_COOKIES.refresh]
+    .forEach((name) => response.cookies.set(name, "", cookieOptions(0)));
 }
 
 export function clearOAuthCookies(response: NextResponse) {
@@ -88,8 +87,8 @@ export function setSpotifyTokenCookies(response: NextResponse, token: SpotifyTok
   const expiresIn = Math.max(60, Math.min(3600, token.expires_in ?? 3600));
   const expiresAt = Date.now() + expiresIn * 1000;
   const refreshToken = token.refresh_token || fallbackRefreshToken;
-  response.cookies.set(SPOTIFY_COOKIES.access, token.access_token, cookieOptions(expiresIn));
-  response.cookies.set(SPOTIFY_COOKIES.accessExpires, String(expiresAt), cookieOptions(expiresIn));
+  response.cookies.set("pomoflow_spotify_access", "", cookieOptions(0));
+  response.cookies.set("pomoflow_spotify_access_expires", "", cookieOptions(0));
   if (refreshToken) response.cookies.set(SPOTIFY_COOKIES.refresh, refreshToken, cookieOptions());
   return expiresAt;
 }

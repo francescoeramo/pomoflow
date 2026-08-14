@@ -54,6 +54,44 @@ declare global {
 const DEFAULT_SPOTIFY = "https://open.spotify.com/playlist/37i9dQZF1DX8Uebhn9wzrS";
 const LINK_KEY = "pomoflow-spotify";
 const PLAYER_READY_TIMEOUT_MS = 15_000;
+const SPOTIFY_RESOLVER_URL = "https://apresolve.spotify.com/?type=dealer&type=spclient";
+
+async function supportsEncryptedPlayback() {
+  if (typeof navigator.requestMediaKeySystemAccess !== "function") return false;
+  const configuration: MediaKeySystemConfiguration = {
+    initDataTypes: ["cenc"],
+    audioCapabilities: [{
+      contentType: 'audio/mp4; codecs="mp4a.40.2"',
+      robustness: "SW_SECURE_CRYPTO",
+    }],
+  };
+
+  for (const keySystem of ["com.widevine.alpha", "com.apple.fps", "com.apple.fps.1_0"]) {
+    try {
+      await navigator.requestMediaKeySystemAccess(keySystem, [configuration]);
+      return true;
+    } catch {
+      // Try the next browser DRM implementation.
+    }
+  }
+  return false;
+}
+
+async function verifySpotifyPlaybackEnvironment() {
+  if (!(await supportsEncryptedPlayback())) {
+    throw new Error("Protected playback is unavailable. Enable DRM/Widevine in your browser and reload the page.");
+  }
+
+  try {
+    await fetch(SPOTIFY_RESOLVER_URL, {
+      mode: "no-cors",
+      cache: "no-store",
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch {
+    throw new Error("Spotify is being blocked by a privacy or ad-blocking extension. Allow Spotify for this site and try again.");
+  }
+}
 
 function saveLocal(key: string, value: string) {
   try {
@@ -174,9 +212,11 @@ export default function SpotifyPlayer() {
           });
           const callbackBody = await callbackResponse.json().catch(() => null) as { error?: string } | null;
           if (!callbackResponse.ok) throw new Error(callbackBody?.error || "Spotify login failed.");
+          await verifySpotifyPlaybackEnvironment();
           await requestAccessToken();
           if (active) setStatus("Spotify connected. Preparing the player…");
         } else {
+          await verifySpotifyPlaybackEnvironment();
           const accessToken = await requestAccessToken().catch(() => null);
           if (accessToken && active) setStatus("Spotify connected. Preparing the player…");
         }

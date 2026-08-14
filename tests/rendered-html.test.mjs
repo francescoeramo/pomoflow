@@ -59,8 +59,13 @@ test("keeps cycle length configurable and rejects template cruft", async () => {
   assert.match(spotifyPlayer, /https:\/\/sdk\.scdn\.co\/spotify-player\.js/);
   assert.match(spotifyPlayer, /PLAYER_READY_TIMEOUT_MS/);
   assert.match(spotifyPlayer, /if \(!success/);
+  assert.match(spotifyPlayer, /requestMediaKeySystemAccess/);
+  assert.match(spotifyPlayer, /SW_SECURE_CRYPTO/);
+  assert.match(spotifyPlayer, /apresolve\.spotify\.com/);
+  assert.match(spotifyPlayer, /verifySpotifyPlaybackEnvironment/);
   assert.match(spotifyApi, /user-modify-playback-state/);
   assert.doesNotMatch(spotifyApi, /user-read-playback-state/);
+  assert.doesNotMatch(spotifyApi, /response\.cookies\.set\(SPOTIFY_COOKIES\.access/);
   assert.doesNotMatch(packageJson, /drizzle|react-loading-skeleton/);
   assert.match(readme, /npm ci/);
   assert.match(readme, /npm run build/);

@@ -14,11 +14,8 @@ export const dynamic = "force-dynamic";
 export async function POST(request: NextRequest) {
   if (!isSameOriginRequest(request)) return noStoreJson({ error: "Invalid request origin." }, { status: 403 });
   const clientId = getSpotifyClientId();
-  const accessToken = request.cookies.get(SPOTIFY_COOKIES.access)?.value ?? "";
-  const expiresAt = Number(request.cookies.get(SPOTIFY_COOKIES.accessExpires)?.value ?? 0);
   const refreshToken = request.cookies.get(SPOTIFY_COOKIES.refresh)?.value ?? "";
 
-  if (accessToken && expiresAt > Date.now() + 60_000) return noStoreJson({ accessToken, expiresAt });
   if (!clientId || !refreshToken) return noStoreJson({ error: "Spotify is not connected." }, { status: 401 });
 
   try {
