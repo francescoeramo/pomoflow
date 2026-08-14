@@ -5,24 +5,21 @@ const contentSecurityPolicy = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
-  "frame-src https://open.spotify.com",
+  "frame-src https://sdk.scdn.co",
   "object-src 'none'",
-  "script-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline' https://sdk.scdn.co",
   "script-src-attr 'none'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
+  "img-src 'self' data: https://*.scdn.co https://*.spotifycdn.com",
   "font-src 'self'",
-  "connect-src 'self'",
-  "media-src 'self' blob:",
+  "connect-src 'self' https://accounts.spotify.com https://api.spotify.com https://*.spotify.com wss://*.spotify.com https://*.scdn.co wss://*.scdn.co",
+  "media-src 'self' blob: https://*.scdn.co https://*.spotifycdn.com",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
   "upgrade-insecure-requests",
 ].join("; ");
 
 const nextConfig: NextConfig = {
-  experimental: {
-    useTypeScriptCli: false,
-  },
   turbopack: {
     root: process.cwd(),
   },
@@ -33,10 +30,8 @@ const nextConfig: NextConfig = {
         headers: [
           { key: "Content-Security-Policy", value: contentSecurityPolicy },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-          { key: "Permissions-Policy", value: 'autoplay=(self "https://open.spotify.com"), camera=(), encrypted-media=(self "https://open.spotify.com"), geolocation=(), microphone=(), payment=(), usb=()' },
-          { key: "Referrer-Policy", value: "no-referrer" },
-          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
-          { key: "Origin-Agent-Cluster", value: "?1" },
+          { key: "Permissions-Policy", value: "camera=(), geolocation=(), microphone=(), payment=(), usb=()" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Strict-Transport-Security", value: "max-age=31536000" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
