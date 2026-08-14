@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import SpotifyPlayer from "./spotify-player";
 
 type Mode = "focus" | "short" | "long";
 type Durations = Record<Mode, number>;
@@ -9,11 +10,9 @@ const DEFAULT_DURATIONS: Durations = { focus: 25, short: 5, long: 15 };
 const DEFAULT_SESSION_TARGET = 4;
 const MIN_SESSION_TARGET = 1;
 const MAX_SESSION_TARGET = 12;
-const DEFAULT_SPOTIFY = "https://open.spotify.com/playlist/37i9dQZF1DX8Uebhn9wzrS";
 const STORAGE_KEYS = {
   durations: "pomoflow-durations",
   sessionTarget: "pomoflow-session-target",
-  spotify: "pomoflow-spotify",
 } as const;
 
 const MODES: { id: Mode; label: string }[] = [
@@ -35,25 +34,6 @@ function savePreference(key: string, value: string) {
     window.localStorage.setItem(key, value);
   } catch {
     // Storage can be disabled or full. The in-memory preference still works.
-  }
-}
-
-function spotifyEmbedUrl(value: string) {
-  const trimmed = value.trim();
-  const uriMatch = trimmed.match(/^spotify:(track|album|playlist|artist|episode|show):([A-Za-z0-9]+)$/);
-  if (uriMatch) return `https://open.spotify.com/embed/${uriMatch[1]}/${uriMatch[2]}?utm_source=pomoflow&theme=0`;
-
-  try {
-    const url = new URL(trimmed);
-    if (url.protocol !== "https:" || url.hostname !== "open.spotify.com") return null;
-    const parts = url.pathname.split("/").filter(Boolean);
-    const typeIndex = parts.findIndex((part) => ["track", "album", "playlist", "artist", "episode", "show"].includes(part));
-    const type = parts[typeIndex];
-    const id = parts[typeIndex + 1];
-    if (!type || !id || !/^[A-Za-z0-9]+$/.test(id)) return null;
-    return `https://open.spotify.com/embed/${type}/${id}?utm_source=pomoflow&theme=0`;
-  } catch {
-    return null;
   }
 }
 
@@ -93,9 +73,6 @@ export default function Home() {
   const [running, setRunning] = useState(false);
   const [completed, setCompleted] = useState(0);
   const [sessionTarget, setSessionTarget] = useState(DEFAULT_SESSION_TARGET);
-  const [spotifyInput, setSpotifyInput] = useState(DEFAULT_SPOTIFY);
-  const [spotifyUrl, setSpotifyUrl] = useState(() => spotifyEmbedUrl(DEFAULT_SPOTIFY) ?? "");
-  const [spotifyError, setSpotifyError] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const deadlineRef = useRef<number | null>(null);
   const finishedRef = useRef(false);
@@ -107,7 +84,6 @@ export default function Home() {
       try {
         const savedDurations = window.localStorage.getItem(STORAGE_KEYS.durations);
         const savedSessionTarget = window.localStorage.getItem(STORAGE_KEYS.sessionTarget);
-        const savedSpotify = window.localStorage.getItem(STORAGE_KEYS.spotify);
         if (savedDurations) {
           const parsed = JSON.parse(savedDurations) as Partial<Durations>;
           const next = {
@@ -120,13 +96,6 @@ export default function Home() {
         }
         if (savedSessionTarget) {
           setSessionTarget(clampSessionTarget(Number(savedSessionTarget)));
-        }
-        if (savedSpotify) {
-          const embed = spotifyEmbedUrl(savedSpotify);
-          if (embed) {
-            setSpotifyInput(savedSpotify);
-            setSpotifyUrl(embed);
-          }
         }
       } catch {
         // Keep sensible defaults if browser storage is unavailable.
@@ -217,17 +186,6 @@ export default function Home() {
     savePreference(STORAGE_KEYS.sessionTarget, String(next));
   }
 
-  function loadSpotify() {
-    const embed = spotifyEmbedUrl(spotifyInput);
-    if (!embed) {
-      setSpotifyError("Paste a valid Spotify track, album, playlist, artist, episode, or show link.");
-      return;
-    }
-    setSpotifyError("");
-    setSpotifyUrl(embed);
-    savePreference(STORAGE_KEYS.spotify, spotifyInput.trim());
-  }
-
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -300,34 +258,12 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="spotify-card" aria-labelledby="spotify-title">
-          <div className="spotify-heading">
-            <div className="spotify-icon" aria-hidden="true"><i /><i /><i /></div>
-            <div><p className="panel-kicker">Your soundtrack</p><h2 id="spotify-title">Spotify</h2></div>
-          </div>
-
-          <div className="spotify-player">
-            {spotifyUrl ? (
-              <iframe src={spotifyUrl} title="Spotify music player" loading="lazy" referrerPolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" />
-            ) : (
-              <div className="player-placeholder"><span>♪</span><p>Add a Spotify link to start listening.</p></div>
-            )}
-          </div>
-
-          <div className="spotify-connect">
-            <label htmlFor="spotify-link">Spotify link</label>
-            <div className="spotify-input-row">
-              <input id="spotify-link" type="url" value={spotifyInput} onChange={(event) => setSpotifyInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") loadSpotify(); }} placeholder="https://open.spotify.com/playlist/…" autoComplete="off" maxLength={500} />
-              <button type="button" onClick={loadSpotify}>Load player</button>
-            </div>
-            {spotifyError ? <p className="spotify-error" role="alert">{spotifyError}</p> : <p className="spotify-help">Paste any public Spotify link. Playback stays in Spotify’s official player.</p>}
-          </div>
-        </section>
+        <SpotifyPlayer />
       </div>
 
       <footer>
-        <span>Designed for focus. No account required.</span>
-        <span>Works wherever your browser does.</span>
+        <span>Designed for focus. Timer preferences stay on this device.</span>
+        <span>Spotify playback requires a Premium account.</span>
       </footer>
     </main>
   );

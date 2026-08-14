@@ -23,7 +23,8 @@ test("server-renders the Pomoflow product", async () => {
   assert.match(html, /<title>Pomoflow — Focus, set to music<\/title>/i);
   assert.match(html, /Find your rhythm\./);
   assert.match(html, />25:00</);
-  assert.match(html, /Spotify music player/);
+  assert.match(html, /Spotify Premium/);
+  assert.match(html, /Listen to every track/);
   assert.doesNotMatch(html, /Codex is working|Your site is taking shape|vinext-starter/i);
 });
 
@@ -42,9 +43,13 @@ test("keeps cycle length configurable and rejects template cruft", async () => {
     readFile(new URL("../README.md", import.meta.url), "utf8"),
   ]);
 
+  const spotifyPlayer = await readFile(new URL("../app/spotify-player.tsx", import.meta.url), "utf8");
   assert.match(page, /pomoflow-session-target/);
   assert.match(page, /Sessions per cycle/);
   assert.match(page, /Array\.from\(\{ length: sessionTarget \}/);
+  assert.match(spotifyPlayer, /code_challenge_method: "S256"/);
+  assert.match(spotifyPlayer, /https:\/\/sdk\.scdn\.co\/spotify-player\.js/);
+  assert.match(spotifyPlayer, /user-modify-playback-state/);
   assert.doesNotMatch(packageJson, /drizzle|react-loading-skeleton/);
   assert.match(readme, /npm ci/);
   assert.match(readme, /npm run build/);
